@@ -34,9 +34,11 @@ def renew_gmail_watch():
             scopes=['https://www.googleapis.com/auth/gmail.readonly']
         )
         
+        print("Suplantar la identidad del usuario de Gmail para la solicitud (DWD)")
         # 2. Suplantar la identidad del usuario de Gmail para la solicitud (DWD)
         impersonated_creds = creds.with_subject(GMAIL_USER_EMAIL)
         
+        print("Construir el servicio de la API de Gmail")
         # 3. Construir el servicio de la API de Gmail
         service = build('gmail', 'v1', credentials=impersonated_creds)
     
@@ -44,6 +46,7 @@ def renew_gmail_watch():
         # Esto ocurre si falla la autenticación (ej. falta configurar DWD)
         return f"Error de Autenticación: {e}. Revisa la configuración de DWD.", 500
 
+    print("Cuerpo de la solicitud de watch")
     # Cuerpo de la solicitud de watch
     watch_request_body = {
         'topicName': TOPIC_NAME,
@@ -54,6 +57,7 @@ def renew_gmail_watch():
         # 4. Enviar la solicitud users.watch
         # 'userId' debe ser 'me' o el correo del usuario si se usa DWD, 
         # aunque en este contexto, 'me' es suficiente si ya se suplantó la identidad.
+        print("Enviar la solicitud users.watch")
         response = service.users().watch(userId=GMAIL_USER_EMAIL, body=watch_request_body).execute()
         
         return (
@@ -73,7 +77,7 @@ def renew_gmail_watch():
 # Start script
 if __name__ == "__main__":
     try:
-        renew_gmail_watch()
+        print(renew_gmail_watch())
     except Exception as err:
         message = (
             f"Task #{TASK_INDEX}, " + f"Attempt #{TASK_ATTEMPT} failed: {str(err)}"
