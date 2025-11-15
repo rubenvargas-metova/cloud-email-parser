@@ -40,7 +40,7 @@ def renew_gmail_watch():
         
         print("Construir el servicio de la API de Gmail")
         # 3. Construir el servicio de la API de Gmail
-        service = build('gmail', 'v1', credentials=impersonated_creds)
+        service = build('gmail', 'v1')
     
     except Exception as e:
         # Esto ocurre si falla la autenticación (ej. falta configurar DWD)
