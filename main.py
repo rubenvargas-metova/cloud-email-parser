@@ -1,75 +1,79 @@
-# Copyright 2022 Google LLC.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http:#www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# [START cloudrun_jobs_quickstart]
 import json
 import os
 import random
 import sys
 import time
+import functions_framework
+from googleapiclient.discovery import build
+from google.auth import default
+from google.auth.transport.requests import Request
 
-# [START cloudrun_jobs_env_vars]
-# Retrieve Job-defined env vars
-TASK_INDEX = os.getenv("CLOUD_RUN_TASK_INDEX", 0)
-TASK_ATTEMPT = os.getenv("CLOUD_RUN_TASK_ATTEMPT", 0)
-# Retrieve User-defined env vars
-SLEEP_MS = os.getenv("SLEEP_MS", 0)
-FAIL_RATE = os.getenv("FAIL_RATE", 0)
-# [END cloudrun_jobs_env_vars]
+# --- Configuración (DEBES ACTUALIZAR ESTOS VALORES) ---
+# Reemplaza con tu ID real de Proyecto de GCP
+PROJECT_ID = "course-474815" 
+# El nombre del Topic de Pub/Sub que creaste
+TOPIC_ID = "gmail-new-email-topic"
+# Formato completo del nombre del topic
+TOPIC_NAME = f"projects/{PROJECT_ID}/topics/{TOPIC_ID}"
+# El correo electrónico del usuario de Gmail que deseas monitorear
+GMAIL_USER_EMAIL = "ruben.vp8510@gmail.com"
+# ------------------------------------
 
 
-# Define main script
-def main(sleep_ms=0, fail_rate=0):
-    """Program that simulates work using the sleep method and random failures.
-
-    Args:
-        sleep_ms: number of milliseconds to sleep
-        fail_rate: rate of simulated errors
+def renew_gmail_watch():
     """
-    print(f"Starting Task #{TASK_INDEX}, Attempt #{TASK_ATTEMPT}...")
-    # Simulate work by waiting for a specific amount of time
-    time.sleep(float(sleep_ms) / 1000)  # Convert to seconds
-
-    # Simulate errors
-    random_failure(float(fail_rate))
-
-    print(f"Completed Task #{TASK_INDEX}.")
-
-
-def random_failure(rate):
-    """Throws an error based on fail rate
-
-    Args:
-        rate: a float between 0 and 1
+    Función HTTP activada por Cloud Scheduler para renovar la solicitud users.watch.
+    Requiere la Delegación a Nivel de Dominio (DWD) para autenticarse automáticamente.
     """
-    if rate < 0 or rate > 1:
-        # Return without retrying the Job Task
-        print(
-            f"Invalid FAIL_RATE env var value: {rate}. "
-            + "Must be a float between 0 and 1 inclusive."
+    
+    try:
+        # 1. Obtener credenciales del Service Account de la Cloud Function
+        # Esto usa las Application Default Credentials (ADC)
+        creds, _ = default(
+            # Se requiere el scope de lectura para el watch
+            scopes=['https://www.googleapis.com/auth/gmail.readonly']
         )
-        return
+        
+        # 2. Suplantar la identidad del usuario de Gmail para la solicitud (DWD)
+        impersonated_creds = creds.with_subject(GMAIL_USER_EMAIL)
+        
+        # 3. Construir el servicio de la API de Gmail
+        service = build('gmail', 'v1', credentials=impersonated_creds)
+    
+    except Exception as e:
+        # Esto ocurre si falla la autenticación (ej. falta configurar DWD)
+        return f"Error de Autenticación: {e}. Revisa la configuración de DWD.", 500
 
-    random_failure = random.random()
-    if random_failure < rate:
-        raise Exception("Task failed.")
+    # Cuerpo de la solicitud de watch
+    watch_request_body = {
+        'topicName': TOPIC_NAME,
+        'labelIds': ['INBOX'], # Monitorea solo la bandeja de entrada
+    }
+    
+    try:
+        # 4. Enviar la solicitud users.watch
+        # 'userId' debe ser 'me' o el correo del usuario si se usa DWD, 
+        # aunque en este contexto, 'me' es suficiente si ya se suplantó la identidad.
+        response = service.users().watch(userId=GMAIL_USER_EMAIL, body=watch_request_body).execute()
+        
+        return (
+            f"✅ Watch renovado con éxito para {GMAIL_USER_EMAIL}. "
+            f"Nuevo History ID: {response.get('historyId')}. "
+            f"Expira: {response.get('expiration')}", 
+            200
+        )
 
+    except Exception as e:
+        print(f"Error en la solicitud Watch: {e}")
+        return (
+            f"❌ Fallo al renovar el watch. Revisa Pub/Sub y permisos. Error: {e}", 
+            500
+        )
 
 # Start script
 if __name__ == "__main__":
     try:
-        main(SLEEP_MS, FAIL_RATE)
+        renew_gmail_watch()
     except Exception as err:
         message = (
             f"Task #{TASK_INDEX}, " + f"Attempt #{TASK_ATTEMPT} failed: {str(err)}"
