@@ -26,6 +26,7 @@ def renew_gmail_watch():
     Requiere la Delegación a Nivel de Dominio (DWD) para autenticarse automáticamente.
     """
     
+    """
     try:
         # 1. Obtener credenciales del Service Account de la Cloud Function
         # Esto usa las Application Default Credentials (ADC)
@@ -40,11 +41,14 @@ def renew_gmail_watch():
         
         print("Construir el servicio de la API de Gmail")
         # 3. Construir el servicio de la API de Gmail
-        service = build('gmail', 'v1')
+        service = build('gmail', 'v1', credentials=impersonated_creds)
     
     except Exception as e:
         # Esto ocurre si falla la autenticación (ej. falta configurar DWD)
         return f"Error de Autenticación: {e}. Revisa la configuración de DWD.", 500
+    """
+    
+    service = build('gmail', 'v1')
 
     print("Cuerpo de la solicitud de watch")
     # Cuerpo de la solicitud de watch
